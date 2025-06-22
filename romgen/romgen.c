@@ -42,6 +42,8 @@ int ParseOptions(int argc,char **argv,struct RomGenOptions *opts)
 		{0, 0, 0, 0}
 	};
 
+	opts->offset=0;
+
 	while(1)
 	{
 		int c;
@@ -54,7 +56,7 @@ int ParseOptions(int argc,char **argv,struct RomGenOptions *opts)
 				printf("Usage: %s [options] <filename>\n",argv[0]);
 				printf("    -h --help\t  display this message\n");
 				printf("    -w --word\t  output as word-oriented rather than byte-oriented.\n");
-				printf("    -o --offset\t  skip a number of words before outputting ROM data.\n");
+				printf("    -o --offset\t  skip a number of words before outputting ROM data. (Cumulative)\n");
 				printf("    -s --stride\t  skip a number of words between each word of ROM data.\n");
 				printf("    -l --limit\t  stop after a specified number of bytes of ROM data.\n");
 				printf("    -b --byteswap\t  reverse the byte order of the ROM data.\n");
@@ -62,7 +64,7 @@ int ParseOptions(int argc,char **argv,struct RomGenOptions *opts)
 				printf("    -x --hex\t  output a pure hex file suitable for use with Lattice Diamond.\n");
 				break;
 			case 'o':
-				opts->offset=atoi(optarg);
+				opts->offset+=atoi(optarg);
 				break;
 			case 'l':
 				opts->limit=atoi(optarg);
