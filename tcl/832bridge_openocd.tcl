@@ -5,17 +5,38 @@ namespace eval vjtag {
 	variable tap
 }
 
+set ::vjtag::devices {
+	# GW2AR-18 on TangNano 20k
+	{ 0x0000081b 0x42 0x43 GW2AR }
+	
+	# ECP5 LFE5U25 on IceSugarPro
+	{ 0x41111043 0x32 0x38 ECP5 }
+
+	# ECP5 LFE5U45 on ULX3S
+	{ 0x41112043 0x32 0x38 ECP5 }
+
+	# ECP5 LFE5U85 on ULX3S
+	{ 0x41113043 0x32 0x38 ECP5 }
+	
+	# ECP5 LFE5UM85 on MMM-V4R0-L5SD
+	{ 0x01113043 0x32 0x38 ECP5 }
+
+	# XC3S1600 on PanoLogic G1
+	{ 0x21c3a093 0x02 0x03 {Spartan 3E}}
+
+}
+
 
 # Virtual IR scan
 proc ::vjtag::ir {ir} {
-	irscan $::vjtag::tap 0x32
+	irscan $::vjtag::tap 0x42
 	return [drscan $::vjtag::tap 32 $ir]
 }
 
 
 # Virtual DR scan - shifts a value into a register attached to ER2
 proc ::vjtag::dr {v} {
-	irscan $::vjtag::tap 0x38
+	irscan $::vjtag::tap 0x43
 	return [drscan $::vjtag::tap 32 $v]
 }
 
@@ -87,6 +108,21 @@ proc ::vjtag::send {a} {
 init
 scan_chain
 set ::vjtag::tap target.tap
+
+# Determine Usr1 and Usr2 JTAG IR scan codes for the current device
+set id [jtag cget $::vjtag::tap -idcode]
+
+set v -1
+for {set i 0} {$i < [llength $::vjtag::devices]} {incr i} {
+	set record [lindex $::vjtag::devices $i]
+	if {[lindex $record 0] == $id} {
+		set ::vjtag::vir [lindex $record 1]
+		set ::vjtag::vdr [lindex $record 2]
+		puts "[lindex $record 3] found - vir $::vjtag::vir, vdr $::vjtag::vdr"
+		set v $i
+	}
+}
+
 
 # Make the script interruptable with ctrl-c (FIXME - doesn't work once the server is active.)
 signal handle SIGINT SIGTERM

@@ -4,6 +4,9 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+library work;
+use work.debug_jtag_plumbing.all;
+
 entity debug_bridge_jtag is
 generic (
 	id : natural := 16#832d#
@@ -22,11 +25,8 @@ end entity;
 
 architecture rtl of debug_bridge_jtag is
 	-- JTAG signals
-	signal capture : std_logic_vector(1 downto 0);
-	signal update : std_logic_vector(1 downto 0);
-	signal shift : std_logic_vector(1 downto 0);
-	signal jtck : std_logic;
-	signal jtck_inv : std_logic;
+	signal to_regs : debug_jtag_to_regs;
+	signal from_regs : debug_jtag_from_regs;
 
 	-- FIFO signals
 	-- to JTAG
@@ -38,6 +38,8 @@ architecture rtl of debug_bridge_jtag is
 	
 	signal vir : std_logic_vector(31 downto 0);
 	signal vir_in : std_logic_vector(31 downto 0);
+	signal vir_update : std_logic;
+	signal vdr_update : std_logic;
 
 	signal ack_i : std_logic;
 
@@ -52,17 +54,10 @@ begin
 
 		vjtag : entity work.debug_virtualjtag
 		port map (
-			tck => jtck,
-			tdi => jtdi,
-			tdo => jtdo,
-			capture => capture,
-			shift => shift,
-			update => update
+			from_regs => from_regs,
+			to_regs => to_regs
 		);
 		
-
-		jtck_inv<=not jtck;
-
 		-- Create a pair of registers to be accessed over the JTAG chain
 
 		virtual_ir : entity work.vjtag_register
@@ -70,14 +65,12 @@ begin
 			bits => 32
 		)
 		port map (
-			tck => jtck,
-			tdo => jtdo(0),
-			tdi => jtdi,
-			cap => capture(0),
-			upd => update(0),
-			shift => shift(0),
+			from_jtag => to_regs(0),
+			to_jtag => from_regs(0),
+			clk => clk,
 			d => vir_in,
-			q => vir
+			q => vir,
+			upd_sys => vir_update
 		);
 
 		virtual_dr : entity work.vjtag_register
@@ -85,14 +78,12 @@ begin
 			bits => 32
 		)
 		port map (
-			tck => jtck,
-			tdo => jtdo(1),
-			tdi => jtdi,
-			cap => capture(1),
-			upd => update(1),
-			shift => shift(1),
+			from_jtag => to_regs(1),
+			to_jtag => from_regs(1),
+			clk => clk,
 			d => tjd,
-			q => fjq
+			q => fjq,
+			upd_sys => vdr_update
 		);
 	end block;
 
@@ -106,7 +97,7 @@ begin
 	)
 	port map(
 		reset_n => reset_n,
-		rd_clk => jtck_inv,
+		rd_clk => clk,
 		rd_en => tjrd,
 		dout => tjd,
 		empty => tjempty,
@@ -117,15 +108,17 @@ begin
 		full => tjfull
 	);
 
-	process (jtck) begin
-		if falling_edge(jtck) then
+	process (clk) begin
+		if rising_edge(clk) then
 			tjrd <= '0';
 			fjwr <= '0';
 			if vir(1 downto 0) = "00" then
-				tjrd <= capture(1) and not tjempty; -- Lag capture by 1 cycle
+--				tjrd <= capture(1) and not tjempty; -- Lag capture by 1 cycle
+				-- Step the FIFO on update rather than delayed capture since Gowin's JTAG primitive doesn't supply a proper capture signal.
+				tjrd <= vdr_update and not tjempty;
 			end if;
 			if vir(1 downto 0) = "01" then
-				fjwr <= update(1) and not fjfull; 
+				fjwr <= vdr_update and not fjfull; 
 			end if;
 		end if;
 	end process;
@@ -145,7 +138,7 @@ begin
 		dout => q,
 		empty => fjempty,
 
-		wr_clk => jtck_inv,
+		wr_clk => clk,
 		wr_en => fjwr,
 		din => fjq,
 		full => fjfull

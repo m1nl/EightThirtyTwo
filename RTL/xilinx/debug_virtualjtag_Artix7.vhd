@@ -1,3 +1,29 @@
+library ieee;
+use ieee.std_logic_1164.all;
+
+package debug_jtag_plumbing is
+
+type debug_jtag_to_reg is record
+	tck : std_logic;
+	tdi : std_logic;
+	sel : std_logic;
+	rst : std_logic;
+	capture : std_logic;
+	shift : std_logic;
+	update : std_logic;
+end record;
+
+type debug_jtag_to_regs is array (0 to 1) of debug_jtag_to_reg;
+
+type debug_jtag_from_reg is record
+	tdo : std_logic;
+end record;
+
+type debug_jtag_from_regs is array (0 to 1) of debug_jtag_from_reg;
+
+
+end package;
+
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -6,38 +32,22 @@ use ieee.numeric_std.all;
 Library UNISIM;
 use UNISIM.vcomponents.all;
 
-entity debug_virtualjtag_xilinx is
+library work;
+use work.debug_jtag_plumbing.all;
+
+
+entity debug_virtualjtag is
 generic (
 	irsize : integer := 2;
 	drsize : integer := 32
 );
 port(
-	ir_out : out std_logic_vector(irsize-1 downto 0);
-	tdo : in std_logic;
-	tck : out std_logic;
-	tdi : out std_logic;
-	virtual_state_cdr : out std_logic;
-	virtual_state_sdr : out std_logic;
-	virtual_state_udr : out std_logic;
-	virtual_state_uir : out std_logic
+	from_regs : in debug_jtag_from_regs;
+	to_regs : out debug_jtag_to_regs
 );
 end entity;
 
-architecture rtl of debug_virtualjtag_xilinx is
-
-signal ir_cap : std_logic;
-signal ir_sel : std_logic;
-signal ir_shift : std_logic;
-signal ir_update : std_logic;
-signal ir_tck : std_logic;
-signal ir_tdi : std_logic;
-signal ir_tdo : std_logic;
-signal ir_sreg : std_logic_vector(1 downto 0);
-
-signal dr_cap : std_logic;
-signal dr_sel : std_logic;
-signal dr_shift : std_logic;
-signal dr_update : std_logic;
+architecture rtl of debug_virtualjtag is
 
 begin
 
@@ -48,33 +58,19 @@ generic map
 	JTAG_CHAIN => 3
 )
 port map (
-	CAPTURE => ir_cap,   -- 1-bit output: CAPTURE output from TAP controller.
-	DRCK => open,        -- 1-bit output: Gated TCK output. When SEL is asserted, DRCK toggles when CAPTURE or
-                         -- SHIFT are asserted.
-	RESET=> open,        -- 1-bit output: Reset output for TAP controller.
-	RUNTEST => open,     -- 1-bit output: Output asserted when TAP controller is in Run Test/Idle state.
-	SEL => ir_sel,       -- 1-bit output: USER instruction active output.
-	SHIFT => ir_shift,   -- 1-bit output: SHIFT output from TAP controller.
-	TCK => ir_tck,       -- 1-bit output: Test Clock output. Fabric connection to TAP Clock pin.
-	TDI => ir_tdi,       -- 1-bit output: Test Data Input (TDI) output from TAP controller.
-	TMS => open,         -- 1-bit output: Test Mode Select output. Fabric connection to TAP.
-	UPDATE => ir_update, -- 1-bit output: UPDATE output from TAP controller
-	TDO => ir_tdo        -- 1-bit input: Test Data Output (TDO) input for USER function.
+	CAPTURE => to_regs(0).capture, -- 1-bit output: CAPTURE output from TAP controller.
+	DRCK => open,                  -- 1-bit output: Gated TCK output. When SEL is asserted, DRCK toggles when CAPTURE or
+                                  -- SHIFT are asserted.
+	RESET=> to_regs(0).rst,        -- 1-bit output: Reset output for TAP controller.
+	RUNTEST => open,               -- 1-bit output: Output asserted when TAP controller is in Run Test/Idle state.
+	SEL => to_regs(0).sel,         -- 1-bit output: USER instruction active output.
+	SHIFT => to_regs(0).shift,     -- 1-bit output: SHIFT output from TAP controller.
+	TCK => to_regs(0).tck,         -- 1-bit output: Test Clock output. Fabric connection to TAP Clock pin.
+	TDI => to_regs(0).tdi,         -- 1-bit output: Test Data Input (TDI) output from TAP controller.
+	TMS => open,                   -- 1-bit output: Test Mode Select output. Fabric connection to TAP.
+	UPDATE => to_regs(0).update,   -- 1-bit output: UPDATE output from TAP controller
+	TDO => from_regs(0).tdo        -- 1-bit input: Test Data Output (TDO) input for USER function.
 );
-
-ir_tdo <= ir_sreg(0);
-ir_out <= ir_sreg;
-
-process(ir_tck)
-begin
-	if rising_edge(ir_tck) then
-		if ir_sel='1' and ir_shift='1' then
-			ir_sreg <= ir_tdi & ir_sreg(irsize-1 downto 1);
-		end if;
-	end if;
-end process;
-
-virtual_state_uir <= ir_sel and ir_update;
 
 
 -- Use chain 3 for virtual IR
@@ -84,23 +80,81 @@ generic map
 	JTAG_CHAIN => 4
 )
 port map (
-	CAPTURE => dr_cap,   -- 1-bit output: CAPTURE output from TAP controller.
-	DRCK => open,        -- 1-bit output: Gated TCK output. When SEL is asserted, DRCK toggles when CAPTURE or
-                         -- SHIFT are asserted.
-	RESET=> open,        -- 1-bit output: Reset output for TAP controller.
-	RUNTEST => open,     -- 1-bit output: Output asserted when TAP controller is in Run Test/Idle state.
-	SEL => dr_sel,       -- 1-bit output: USER instruction active output.
-	SHIFT => dr_shift,   -- 1-bit output: SHIFT output from TAP controller.
-	TCK => tck,          -- 1-bit output: Test Clock output. Fabric connection to TAP Clock pin.
-	TDI => tdi,          -- 1-bit output: Test Data Input (TDI) output from TAP controller.
-	TMS => open,         -- 1-bit output: Test Mode Select output. Fabric connection to TAP.
-	UPDATE => dr_update, -- 1-bit output: UPDATE output from TAP controller
-	TDO => tdo           -- 1-bit input: Test Data Output (TDO) input for USER function.
+	CAPTURE => to_regs(1).capture, -- 1-bit output: CAPTURE output from TAP controller.
+	DRCK => open,                  -- 1-bit output: Gated TCK output. When SEL is asserted, DRCK toggles when CAPTURE or
+                                  -- SHIFT are asserted.
+	RESET=> to_regs(1).rst,        -- 1-bit output: Reset output for TAP controller.
+	RUNTEST => open,               -- 1-bit output: Output asserted when TAP controller is in Run Test/Idle state.
+	SEL => to_regs(1).sel,         -- 1-bit output: USER instruction active output.
+	SHIFT => to_regs(1).shift,     -- 1-bit output: SHIFT output from TAP controller.
+	TCK => to_regs(1).tck,         -- 1-bit output: Test Clock output. Fabric connection to TAP Clock pin.
+	TDI => to_regs(1).tdi,         -- 1-bit output: Test Data Input (TDI) output from TAP controller.
+	TMS => open,                   -- 1-bit output: Test Mode Select output. Fabric connection to TAP.
+	UPDATE => to_regs(1).update,   -- 1-bit output: UPDATE output from TAP controller
+	TDO => from_regs(1).tdo        -- 1-bit input: Test Data Output (TDO) input for USER function.
 );
 
-virtual_state_cdr <= dr_sel and dr_cap;
-virtual_state_sdr <= dr_sel and dr_shift;
-virtual_state_udr <= dr_sel and dr_update;
+end architecture;
 
+
+library ieee;
+use ieee.std_logic_1164.all;
+
+library work;
+use work.debug_jtag_plumbing.all;
+
+entity vjtag_register is
+generic (
+	bits : integer := 32
+);
+port (
+	-- JTAG clock domain
+	from_jtag : in debug_jtag_to_reg;
+	to_jtag : out debug_jtag_from_reg;
+
+	-- System clock domain
+	clk : in std_logic;
+	d : in std_logic_vector(bits-1 downto 0);
+	q : out std_logic_vector(bits-1 downto 0);
+	upd_sys : out std_logic
+);
+end entity;
+
+architecture rtl of vjtag_register is
+	signal shiftreg : std_logic_vector(bits-1 downto 0);
+	signal tck_inv : std_logic;
+	signal toggle : std_logic := '0';
+	signal toggle_s : std_logic_vector(2 downto 0) := (others => '0');
+begin
+	to_jtag.tdo <= shiftreg(0);
+
+	process(from_jtag.tck,from_jtag.rst) begin
+		if from_jtag.rst='1' then
+			shiftreg<=(others => '0');
+		elsif rising_edge(from_jtag.tck) then
+			if from_jtag.shift='1' then
+				shiftreg <= from_jtag.tdi & shiftreg(shiftreg'high downto 1);
+			end if;
+			if from_jtag.capture='1' then
+				shiftreg<=d;
+			end if;
+		end if;
+	end process;
+
+	process(from_jtag.update) begin
+		if rising_edge(from_jtag.update) then
+			if from_jtag.sel='1' then
+				q<=shiftreg;
+				toggle<=not toggle;
+			end if;
+		end if;
+	end process;
+
+	process(clk) begin
+		if rising_edge(clk) then
+			toggle_s <= toggle & toggle_s(toggle_s'high downto 1);
+			upd_sys <= toggle_s(1) xor toggle_s(0);
+		end if;
+	end process;
 end architecture;
 
