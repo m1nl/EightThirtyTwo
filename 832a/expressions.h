@@ -34,7 +34,7 @@ struct expression
 
 
 struct expression *expression_new();
-void expression_delete();
+void expression_delete(struct expression *expr);
 
 struct expression *expression_parse(const char *str);
 int expression_evaluate(const struct expression *expr,const struct equate *equates);
